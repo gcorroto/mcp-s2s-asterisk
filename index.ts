@@ -1,25 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import express from "express";
-import { Request, Response } from "express";
-
 import { z } from "zod";
-
-// Import Phone Assistant operations
-import * as phoneAssistant from "./operations/realtime-assistant.js";
 
 // Import Phone Assistant tools
 import * as phoneTools from "./tools/realtime-assistant.js";
-
-// Import authentication middleware
-import {
-  authenticate,
-  requestLogger,
-  validateJsonPayload,
-  errorHandler,
-  enableCors,
-  rateLimit
-} from "./middleware/auth.js";
 
 import { VERSION } from "./common/version.js";
 
@@ -29,143 +13,270 @@ const server = new McpServer({
   version: VERSION,
 });
 
-// ----- PHONE ASSISTANT TOOL -----
+// ----- HERRAMIENTAS MCP PARA ASISTENTE TELEFÓNICO -----
 
-// Tool principal para asistente telefónico conversacional
+// 1. Realizar llamada telefónica
 server.tool(
-  "mcp_phone_assistant",
-  "Realizar llamadas telefónicas conversacionales automatizadas",
+  "phone_make_call",
+  "Realizar una llamada telefónica conversacional automatizada",
   {
-    action: z
-      .enum([
-        "make_call",
-        "get_status", 
-        "cancel",
-        "get_metrics",
-        "get_history",
-        "get_active_calls",
-        "health_check",
-        "get_logs",
-        "get_last_result"
-      ])
-      .describe("La acción a realizar"),
-    // Parámetros para make_call
-    usuario: z.string().optional().describe("Nombre del usuario a llamar"),
-    telefono: z.string().optional().describe("Número de teléfono del usuario"),
-    proposito: z.string().optional().describe("Propósito específico de la llamada"),
+    usuario: z.string().describe("Nombre del usuario a llamar"),
+    telefono: z.string().describe("Número de teléfono del usuario"),
+    proposito: z.string().describe("Propósito específico de la llamada"),
     contexto: z.string().optional().describe("Contexto adicional sobre el tema a tratar"),
     timeout: z.number().optional().default(40).describe("Timeout de la llamada en segundos"),
-    herramientas_personalizadas: z.string().optional().describe("Herramientas HTTP personalizadas en formato JSON"),
-    // Parámetros para otras acciones
-    callId: z.string().optional().describe("ID de la llamada"),
-    limit: z.number().optional().describe("Límite de resultados"),
-    level: z.enum(["info", "warn", "error", "debug"]).optional().describe("Nivel de log"),
-    component: z.enum(["mcp", "phone", "callback", "client"]).optional().describe("Componente del sistema")
+    herramientas_personalizadas: z.string().optional().describe("Herramientas HTTP personalizadas en formato JSON")
   },
   async (args) => {
-    let result;
-
-    switch (args.action) {
-      case "make_call":
-        if (!args.usuario || !args.telefono || !args.proposito) {
-          throw new Error("usuario, telefono y proposito son requeridos para make_call");
-        }
-        
-        result = await phoneTools.makePhoneCall({
-          usuario: args.usuario,
-          telefono: args.telefono,
-          proposito: args.proposito,
-          contexto: args.contexto,
-          timeout: args.timeout || 40,
-          herramientas_personalizadas: args.herramientas_personalizadas
-        });
-        break;
-
-      case "get_status":
-        if (!args.callId) {
-          throw new Error("callId es requerido para get_status");
-        }
-        result = await phoneTools.getCallStatus({ callId: args.callId });
-        break;
-
-      case "cancel":
-        if (!args.callId) {
-          throw new Error("callId es requerido para cancel");
-        }
-        result = await phoneTools.cancelCall({ callId: args.callId });
-        break;
-
-      case "get_metrics":
-        result = await phoneTools.getCallMetrics();
-        break;
-
-      case "get_history":
-        result = await phoneTools.getConversationHistory({ limit: args.limit });
-        break;
-
-      case "get_active_calls":
-        result = await phoneTools.getActiveCalls();
-        break;
-
-      case "health_check":
-        result = await phoneTools.healthCheck();
-        break;
-
-      case "get_logs":
-        result = await phoneTools.getSystemLogs({
-          limit: args.limit,
-          level: args.level,
-          component: args.component
-        });
-        break;
-
-      case "get_last_result":
-        if (!args.callId) {
-          throw new Error("callId es requerido para get_last_result");
-        }
-        result = await phoneTools.getLastConversationResult({ callId: args.callId });
-        break;
-
-      default:
-        throw new Error(`Acción desconocida: ${args.action}`);
-    }
+    const result = await phoneTools.makePhoneCall({
+      usuario: args.usuario,
+      telefono: args.telefono,
+      proposito: args.proposito,
+      contexto: args.contexto,
+      timeout: args.timeout || 40,
+      herramientas_personalizadas: args.herramientas_personalizadas
+    });
 
     return {
-      content: [{ type: "text", text: JSON.stringify(result) }],
+      content: [{ 
+        type: "text", 
+        text: `📞 Llamada iniciada con ${args.usuario}\n\n**ID de llamada:** ${result.callId}\n**Mensaje:** ${result.message}\n**Duración estimada:** ${result.estimatedDuration || 'No estimada'} segundos`
+      }],
     };
   }
 );
 
-async function createServer() {
-  // Create a new server instance with proper metadata
-  console.error("Creating Phone Assistant MCP Server...");
-  console.error("Server info: phone-assistant-mcp-server");
-  console.error("Version:", VERSION);
-  
-  // Validate environment variables
-  if (!process.env.PHONE_API_URL) {
-    console.error("Warning: PHONE_API_URL environment variable not set");
-  } else {
-    console.error("PHONE_API_URL:", process.env.PHONE_API_URL);
-  }
-  
-  if (!process.env.PHONE_API_KEY) {
-    console.error("Warning: PHONE_API_KEY environment variable not set");
-  } else {
-    console.error("PHONE_API_KEY:", "***");
-  }
-  
-  if (!process.env.MCP_CALLBACK_URL) {
-    console.error("Warning: MCP_CALLBACK_URL environment variable not set");
-  } else {
-    console.error("MCP_CALLBACK_URL:", process.env.MCP_CALLBACK_URL);
-  }
-  
-  return server;
-}
+// 2. Obtener estado de llamada
+server.tool(
+  "phone_get_status",
+  "Obtener el estado actual de una llamada telefónica",
+  {
+    callId: z.string().describe("ID de la llamada")
+  },
+  async (args) => {
+    const result = await phoneTools.getCallStatus({ callId: args.callId });
+    
+    if (!result) {
+      return {
+        content: [{ type: "text", text: `❌ No se encontró la llamada con ID: ${args.callId}` }],
+      };
+    }
 
-async function startStdioServer() {
+    return {
+      content: [{ 
+        type: "text", 
+        text: `📊 **Estado de llamada ${args.callId}**\n\n**Usuario:** ${result.usuario}\n**Teléfono:** ${result.telefono}\n**Estado:** ${result.status}\n**Propósito:** ${result.proposito}\n**Duración:** ${result.duration || 'N/A'} segundos\n**Última actualización:** ${result.lastUpdate}`
+      }],
+    };
+  }
+);
+
+// 3. Cancelar llamada
+server.tool(
+  "phone_cancel_call",
+  "Cancelar una llamada telefónica en curso",
+  {
+    callId: z.string().describe("ID de la llamada a cancelar")
+  },
+  async (args) => {
+    const result = await phoneTools.cancelCall({ callId: args.callId });
+
+    return {
+      content: [{ 
+        type: "text", 
+        text: result.success 
+          ? `✅ ${result.message}` 
+          : `❌ ${result.message}`
+      }],
+    };
+  }
+);
+
+// 4. Obtener métricas del sistema
+server.tool(
+  "phone_get_metrics",
+  "Obtener métricas y estadísticas del sistema telefónico",
+  {},
+  async () => {
+    const result = await phoneTools.getCallMetrics();
+
+    return {
+      content: [{ 
+        type: "text", 
+        text: `📊 **Métricas del Sistema Telefónico**\n\n**Total de llamadas:** ${result.totalCalls}\n**Llamadas exitosas:** ${result.successfulCalls}\n**Llamadas fallidas:** ${result.failedCalls}\n**Tasa de éxito:** ${result.successRate}%\n**Duración promedio:** ${Math.round(result.averageDuration)} segundos\n\n**Top propósitos:**\n${result.topPurposes.map(p => `- ${p.proposito}: ${p.count} llamadas`).join('\n')}`
+      }],
+    };
+  }
+);
+
+// 5. Obtener historial de conversaciones
+server.tool(
+  "phone_get_conversation_history",
+  "Obtener el historial de conversaciones telefónicas recientes",
+  {
+    limit: z.number().optional().default(10).describe("Número máximo de conversaciones a obtener")
+  },
+  async (args) => {
+    const result = await phoneTools.getConversationHistory({ limit: args.limit });
+
+    if (result.length === 0) {
+      return {
+        content: [{ type: "text", text: "📭 No hay conversaciones en el historial" }],
+      };
+    }
+
+    const historyText = result.map(conv => 
+      `**${conv.callId}** - ${conv.success ? '✅' : '❌'}\n${conv.response_for_user}\n---`
+    ).join('\n\n');
+
+    return {
+      content: [{ 
+        type: "text", 
+        text: `📚 **Historial de Conversaciones (${result.length} últimas)**\n\n${historyText}`
+      }],
+    };
+  }
+);
+
+// 6. Obtener llamadas activas
+server.tool(
+  "phone_get_active_calls",
+  "Obtener lista de llamadas telefónicas activas en este momento",
+  {},
+  async () => {
+    const result = await phoneTools.getActiveCalls();
+
+    if (result.length === 0) {
+      return {
+        content: [{ type: "text", text: "📵 No hay llamadas activas en este momento" }],
+      };
+    }
+
+    const activeText = result.map(call => 
+      `**${call.callId}** - ${call.usuario} (${call.telefono})\n📞 Estado: ${call.status}\n🎯 Propósito: ${call.proposito}\n⏱️ Iniciada: ${call.startTime || 'N/A'}`
+    ).join('\n\n');
+
+    return {
+      content: [{ 
+        type: "text", 
+        text: `📞 **Llamadas Activas (${result.length})**\n\n${activeText}`
+      }],
+    };
+  }
+);
+
+// 7. Health check del sistema
+server.tool(
+  "phone_health_check",
+  "Verificar el estado de salud del sistema telefónico",
+  {},
+  async () => {
+    const result = await phoneTools.healthCheck();
+
+    const statusIcon = result.status === 'healthy' ? '✅' : '❌';
+    const phoneIcon = result.phoneAssistant ? '📞' : '📵';
+
+    return {
+      content: [{ 
+        type: "text", 
+        text: `${statusIcon} **Estado del Sistema: ${result.status.toUpperCase()}**\n\n${phoneIcon} **Asistente telefónico:** ${result.phoneAssistant ? 'Conectado' : 'Desconectado'}\n📊 **Llamadas activas:** ${result.activeCalls}\n🕐 **Verificado:** ${result.timestamp}${result.lastError ? `\n❌ **Último error:** ${result.lastError}` : ''}`
+      }],
+    };
+  }
+);
+
+// 8. Obtener logs del sistema
+server.tool(
+  "phone_get_logs",
+  "Obtener logs del sistema telefónico para debugging",
+  {
+    limit: z.number().optional().default(20).describe("Número máximo de logs a obtener"),
+    level: z.enum(["info", "warn", "error", "debug"]).optional().describe("Filtrar por nivel de log"),
+    component: z.enum(["mcp", "phone", "callback", "client"]).optional().describe("Filtrar por componente del sistema")
+  },
+  async (args) => {
+    const result = await phoneTools.getSystemLogs({
+      limit: args.limit,
+      level: args.level,
+      component: args.component
+    });
+
+    if (result.length === 0) {
+      return {
+        content: [{ type: "text", text: "📝 No hay logs disponibles con los filtros especificados" }],
+      };
+    }
+
+    const logsText = result.map(log => {
+      const levelIcon = {
+        info: 'ℹ️',
+        warn: '⚠️', 
+        error: '❌',
+        debug: '🔍'
+      }[log.level] || '📝';
+      
+      return `${levelIcon} **${log.timestamp}** [${log.component.toUpperCase()}] ${log.action}\n${JSON.stringify(log.details, null, 2)}`;
+    }).join('\n\n');
+
+    return {
+      content: [{ 
+        type: "text", 
+        text: `📝 **Logs del Sistema (${result.length} entradas)**\n\n${logsText}`
+      }],
+    };
+  }
+);
+
+// 9. Obtener último resultado de conversación
+server.tool(
+  "phone_get_last_result",
+  "Obtener el último resultado procesado de una llamada específica",
+  {
+    callId: z.string().describe("ID de la llamada")
+  },
+  async (args) => {
+    const result = await phoneTools.getLastConversationResult({ callId: args.callId });
+
+    if (!result || !result.found) {
+      return {
+        content: [{ type: "text", text: `❌ No se encontró resultado para la llamada: ${args.callId}` }],
+      };
+    }
+
+    return {
+      content: [{ 
+        type: "text", 
+        text: `📋 **Resultado de llamada ${args.callId}**\n\n${result.response_for_user || 'Sin respuesta'}\n\n**Acciones realizadas:** ${result.actions_taken?.join(', ') || 'Ninguna'}\n**Procesado:** ${result.processed_at || 'No disponible'}`
+      }],
+    };
+  }
+);
+
+async function runServer() {
   try {
+    console.error("Creating Phone Assistant MCP Server...");
+    console.error("Server info: phone-assistant-mcp-server");
+    console.error("Version:", VERSION);
+    
+    // Validate environment variables
+    if (!process.env.PHONE_API_URL) {
+      console.error("Warning: PHONE_API_URL environment variable not set");
+    } else {
+      console.error("PHONE_API_URL:", process.env.PHONE_API_URL);
+    }
+    
+    if (!process.env.PHONE_API_KEY) {
+      console.error("Warning: PHONE_API_KEY environment variable not set");
+    } else {
+      console.error("PHONE_API_KEY:", "***");
+    }
+    
+    if (!process.env.MCP_CALLBACK_URL) {
+      console.error("Warning: MCP_CALLBACK_URL environment variable not set");
+    } else {
+      console.error("MCP_CALLBACK_URL:", process.env.MCP_CALLBACK_URL);
+    }
+    
     console.error("Starting Phone Assistant MCP Server in stdio mode...");
     
     // Create transport
@@ -178,210 +289,16 @@ async function startStdioServer() {
     
     console.error("MCP Server connected and ready!");
     console.error("Available tools:", [
-      "mcp_phone_assistant"
+      "phone_make_call",
+      "phone_get_status", 
+      "phone_cancel_call",
+      "phone_get_metrics",
+      "phone_get_conversation_history",
+      "phone_get_active_calls",
+      "phone_health_check",
+      "phone_get_logs",
+      "phone_get_last_result"
     ]);
-    
-  } catch (error) {
-    console.error("Error starting stdio server:", error);
-    console.error("Stack trace:", (error as Error).stack);
-    process.exit(1);
-  }
-}
-
-async function startHttpServer(port = 3000) {
-  try {
-    console.error("Starting Phone Assistant MCP Server in HTTP mode...");
-    
-    const app = express();
-    
-    // Middleware básico
-    app.use(enableCors);
-    app.use(requestLogger);
-    app.use(express.json());
-    app.use(validateJsonPayload);
-    app.use(rateLimit(20, 60000)); // 20 requests per minute
-    
-    // ----- PHONE ASSISTANT ENDPOINTS -----
-    
-    // Endpoint principal para recibir resultados de conversaciones telefónicas
-    app.post('/api/phone/conversation-result', authenticate, async (req: Request, res: Response) => {
-      try {
-        console.log('📞 Resultado de conversación recibido del asistente telefónico');
-        
-        const conversationResult = req.body;
-        const result = await phoneAssistant.processConversationResult(conversationResult);
-        
-        res.status(200).json({
-          success: true,
-          result
-        });
-      } catch (error) {
-        console.error('❌ Error procesando resultado de conversación:', error);
-        res.status(500).json({
-          success: false,
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Endpoint para confirmar información (herramienta básica)
-    app.post('/api/phone/confirm-info', authenticate, async (req: Request, res: Response) => {
-      try {
-        console.log('✅ Información confirmada durante llamada');
-        
-        // Procesar confirmación de información
-        // Esta es una herramienta básica que puede usar el asistente telefónico
-        const { callId, tipo_informacion, datos, usuario_confirmo } = req.body;
-        
-        // Log de la confirmación
-        console.log(`📋 Tipo: ${tipo_informacion}, Confirmado: ${usuario_confirmo}, CallId: ${callId}`);
-        
-        res.status(200).json({
-          success: true,
-          message: 'Información confirmada correctamente',
-          callId,
-          tipo_informacion,
-          confirmed: usuario_confirmo
-        });
-      } catch (error) {
-        console.error('❌ Error procesando confirmación:', error);
-        res.status(500).json({
-          success: false,
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Endpoint para health check del asistente telefónico
-    app.get('/api/phone/health', async (_req: Request, res: Response) => {
-      try {
-        const health = await phoneAssistant.healthCheck();
-        res.status(health.status === 'healthy' ? 200 : 503).json(health);
-      } catch (error) {
-        res.status(503).json({
-          status: 'unhealthy',
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Endpoint para obtener métricas
-    app.get('/api/phone/metrics', async (_req: Request, res: Response) => {
-      try {
-        const metrics = phoneAssistant.getCallMetrics();
-        res.status(200).json(metrics);
-      } catch (error) {
-        res.status(500).json({
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Endpoint para obtener llamadas activas
-    app.get('/api/phone/calls/active', async (_req: Request, res: Response) => {
-      try {
-        const activeCalls = phoneAssistant.getActiveCalls();
-        res.status(200).json(activeCalls);
-      } catch (error) {
-        res.status(500).json({
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Endpoint para obtener historial de conversaciones
-    app.get('/api/phone/conversations/history', async (req: Request, res: Response) => {
-      try {
-        const limit = parseInt(req.query.limit as string) || 50;
-        const history = phoneAssistant.getConversationHistory(limit);
-        res.status(200).json(history);
-      } catch (error) {
-        res.status(500).json({
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Endpoint para obtener logs del sistema
-    app.get('/api/phone/logs', async (req: Request, res: Response) => {
-      try {
-        const limit = parseInt(req.query.limit as string) || 100;
-        const logs = phoneAssistant.getSystemLogs(limit);
-        res.status(200).json(logs);
-      } catch (error) {
-        res.status(500).json({
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Endpoint para cancelar una llamada
-    app.post('/api/phone/calls/:callId/cancel', authenticate, async (req: Request, res: Response) => {
-      try {
-        const { callId } = req.params;
-        const success = await phoneAssistant.cancelCall(callId);
-        
-        res.status(200).json({
-          success,
-          message: success ? 'Llamada cancelada' : 'No se pudo cancelar la llamada'
-        });
-      } catch (error) {
-        res.status(500).json({
-          success: false,
-          error: error instanceof Error ? error.message : 'Error interno'
-        });
-      }
-    });
-    
-    // Add a status endpoint
-    app.get('/status', (_req: Request, res: Response) => {
-      res.status(200).json({
-        status: 'ok',
-        server: 'phone-assistant-mcp-server',
-        version: VERSION,
-        features: ['phone-calls', 'conversational-ai']
-      });
-    });
-    
-    // Error handler middleware (debe ir al final)
-    app.use(errorHandler);
-    
-    // Start the server
-    app.listen(port, () => {
-      console.error(`Phone Assistant MCP Server listening on port ${port}`);
-      console.error(`Status endpoint available at http://localhost:${port}/status`);
-      console.error(`Phone Assistant endpoints:`);
-      console.error(`  - POST /api/phone/conversation-result`);
-      console.error(`  - POST /api/phone/confirm-info`);
-      console.error(`  - GET  /api/phone/health`);
-      console.error(`  - GET  /api/phone/metrics`);
-      console.error(`  - GET  /api/phone/calls/active`);
-      console.error(`  - GET  /api/phone/conversations/history`);
-      console.error(`  - GET  /api/phone/logs`);
-      console.error(`  - POST /api/phone/calls/:callId/cancel`);
-    });
-    
-  } catch (error) {
-    console.error("Error starting HTTP server:", error);
-    console.error("Stack trace:", (error as Error).stack);
-    process.exit(1);
-  }
-}
-
-async function runServer() {
-  try {
-    // Create the server
-    await createServer();
-    
-    // Determine server type based on environment variables
-    const serverType = process.env.MCP_SERVER_TYPE || 'stdio';
-    const httpPort = parseInt(process.env.MCP_HTTP_PORT || '3000', 10);
-    
-    if (serverType === 'http') {
-      await startHttpServer(httpPort);
-    } else {
-      await startStdioServer();
-    }
     
   } catch (error) {
     console.error("Error starting server:", error);
