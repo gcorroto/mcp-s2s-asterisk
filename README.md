@@ -14,6 +14,10 @@
 
 </div>
 
+<a href="https://glama.ai/mcp/servers/@gcorroto/mcp-s2s-asterisk">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@gcorroto/mcp-s2s-asterisk/badge" alt="Asterisk S2S Server MCP server" />
+</a>
+
 ---
 
 ## 🏗️ System Architecture
@@ -398,4 +402,4 @@ Do you like the project? We'd love your contribution!
 
 *Transforming phone communication with conversational AI*
 
-</div> 
+</div>
