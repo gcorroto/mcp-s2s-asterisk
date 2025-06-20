@@ -44,24 +44,53 @@ export class PhoneClient {
       console.log(`🔄 Iniciando llamada telefónica a: ${request.usuario} (${request.telefono})`);
       console.log(`📋 Propósito: ${request.proposito}`);
       
+      // Construir las instrucciones completas combinando propósito y contexto
+      let instrucciones = `${request.proposito}.`;
+      if (request.contexto) {
+        instrucciones += ` ${request.contexto}`;
+      }
+      
       // Construir la herramienta HTTP para el callback del MCP
       const mcpCallbackTool = this.buildMcpCallbackTool();
       
-      // Agregar la herramienta de callback a las herramientas existentes
-      const requestWithCallback = {
-        ...request,
-        herramientas: [...request.herramientas, mcpCallbackTool]
+      // Convertir herramientas al formato esperado por la API
+      const tools = [...request.herramientas, mcpCallbackTool].map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        type: "http",
+        url: tool.endpoint,
+        method: tool.method || "POST",
+        headers: tool.authentication ? {
+          [tool.authentication.header || 'Authorization']: tool.authentication.key || ''
+        } : {},
+        parameters: tool.parameters || []
+      }));
+
+      // Estructura de datos que espera la API real
+      const apiRequest = {
+        usuario: request.usuario,
+        telefono: request.telefono,
+        timeout: request.timeout,
+        instrucciones: instrucciones,
+        tools: tools
       };
 
-      const response = await this.client.post('/call', requestWithCallback);
+      // Configurar headers incluyendo X-API-Key
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-API-Key': this.config.apiKey,
+        'User-Agent': 'MCP-PhoneAssistant/1.0'
+      };
+
+      const response = await this.client.post('/instrucciones', apiRequest, { headers });
       
-      console.log(`✅ Llamada telefónica iniciada. CallId: ${response.data.callId}`);
+      console.log(`✅ Llamada telefónica iniciada. Respuesta:`, response.data);
       
       return {
         success: true,
-        callId: response.data.callId || this.generateCallId(),
-        message: response.data.message || 'Llamada telefónica iniciada correctamente',
-        estimatedDuration: response.data.estimatedDuration
+        callId: response.data.call_id || this.generateCallId(),
+        message: response.data.mensaje || 'Llamada telefónica iniciada correctamente',
+        estimatedDuration: request.timeout
       };
     } catch (error) {
       console.error('❌ Error al iniciar llamada telefónica:', error);
@@ -269,4 +298,4 @@ export class PhoneClient {
       throw this.createPhoneError('METRICS_FAILED', 'Error al obtener métricas', error);
     }
   }
-} 
+}

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "asterisk-s2s": {
+      "command": "npx",
+      "args": ["@grec0/mcp-s2s-asterisk@latest"],
+      "env": {
+        "PHONE_API_URL": "http://192.168.4.44:8000",
+        "PHONE_API_KEY": "api-key",
+        "MCP_CALLBACK_URL": "http://localhost:3000"
+      }
+    }
+  }
+} 

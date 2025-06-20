@@ -1,0 +1,46 @@
+# Source files
+src/
+*.ts
+!dist/**/*.d.ts
+
+# Development files
+.env*
+tsconfig.json
+jest.config.js
+pnpm-lock.yaml
+package-lock.json
+
+# Tests
+tests/
+__tests__/
+*.test.*
+*.spec.*
+
+# Development scripts
+run-mcp.bat
+run-mcp.sh
+
+# Git files
+.git/
+.gitignore
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+
+# Build cache
+.cache/
+.parcel-cache/ 
