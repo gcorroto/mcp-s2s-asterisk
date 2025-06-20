@@ -1,14 +1,14 @@
 {
   "name": "@grec0/mcp-s2s-asterisk",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "MCP server para asistente telefónico conversacional con Asterisk S2S",
   "license": "MIT",
   "author": "@grec0",
-  "homepage": "https://github.com/grec0/mcp-s2s-asterisk",
-  "bugs": "https://github.com/grec0/mcp-s2s-asterisk/issues",
+  "homepage": "https://github.com/gcorroto/mcp-s2s-asterisk",
+  "bugs": "https://github.com/gcorroto/mcp-s2s-asterisk/issues",
   "repository": {
     "type": "git",
-    "url": "https://github.com/grec0/mcp-s2s-asterisk.git"
+    "url": "git+https://github.com/gcorroto/mcp-s2s-asterisk.git"
   },
   "keywords": [
     "mcp",
